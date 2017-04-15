@@ -21,10 +21,11 @@ class WorkPool:
         self.workers=[]
         self.leaf_values=[Value(0) for i in range(worker_num)]
 
-        for i in range(0,worker_num):
-            self.workers.append(Worker(i,self.leaf_values))
-
         self.taskGraphics=TaskGraphics(self.leaf_values,worker_num)
+
+        for i in range(0,worker_num):
+            self.workers.append(Worker(i,self.taskGraphics))
+
 
     def selectWorker(self): 
         worker = None
@@ -46,13 +47,13 @@ class WorkPool:
         self.taskGraphics.stop()
 
 class Worker(threading.Thread):
-    def __init__(self,id,data):
+    def __init__(self,id,graphics):
         threading.Thread.__init__(self)
         self.id=id
         self.work_queue=Queue.Queue()
         self.size=0
-        self.bind_data=data
         self.running=False
+        self.graphics=graphics
 
     def getId(self):
         return self.id
@@ -76,26 +77,38 @@ class Worker(threading.Thread):
     def run(self):
         self.running=True
         while self.running:
-            self.bind_data[self.id].value+=1
+            #self.bind_data[self.id].value+=1
+            
             try:
-                func,args=self.work_queue.get(block=False)
+                func,args_ori=self.work_queue.get(block=False)
+                
+                args_callback=(self.update,)
+                args=args_ori+args_callback
+
                 func(*args)#重新取值，避免直接函数调用时参数个数匹配不上
                 self.size-=1
                 self.work_queue.task_done()
             except Exception,e:
-                #traceback.print_exc()
+                traceback.print_exc()
                 break
+        
+    def update(self,fileName,percent):
+        self.graphics.updateTask(self.id,'task_%d: %s'%(self.id,fileName))
+        self.graphics.updateValue(self.id,percent)
 
 class TaskGraphics:
     def __init__(self,data,num=__DEFAULT_NUM__):
-        #self.bind_data=[Value(0) for i in range(num)]
-        self.bind_data=data
+        self.bind_data=[Value(0) for i in range(num)]
+        #self.bind_data=data
         self.terminal=False
         self.bd_defaults=dict(type=Bar,kwargs=dict(max_value=100))
-
+        self.indicator={}
         self.graph_data={}
+
         for i in range(0,num):
-            self.graph_data['task_%d'%i]=BarDescriptor(value=self.bind_data[i],**self.bd_defaults)
+            task_name='task_%d'%i
+            self.indicator[i]=task_name
+            self.graph_data[task_name]=BarDescriptor(value=self.bind_data[i],**self.bd_defaults)
 
         self.__init_tree__()
         threading.Thread(target=self.invalidate,args=()).start()
@@ -104,6 +117,18 @@ class TaskGraphics:
         t=Terminal()
         self.n=ProgressTree(term=t)
         self.n.make_room(self.graph_data)
+
+    def updateTask(self,id,task_name):
+        old_task_name=self.indicator[id]
+        if task_name == old_task_name:
+            return
+
+        self.graph_data[task_name]=self.graph_data[old_task_name]
+        self.indicator[id]=task_name
+        del self.graph_data[old_task_name]
+    
+    def updateValue(self,id,value):
+        self.bind_data[id].value=value
 
     def invalidate(self):
         while not self.terminal:

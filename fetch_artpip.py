@@ -73,7 +73,8 @@ class ArtpipFetcher:
 
                     artist=Artist(url,artistName,artistId,self.workPool)
 
-                    self.workPool.add_task(coverArtwork.fetch)#无参
+                    #self.workPool.add_task(coverArtwork.fetch)#无参
+                    coverArtwork.fetch()
                     artist.fetch()
 
                     #if new_thread:
@@ -107,7 +108,7 @@ class Artist:
         if not running:
             return
 
-        print u'fetching %s\'s artworks....'%(self.name)
+        #print u'fetching %s\'s artworks....'%(self.name)
 
         artistUrl=u'%s/api/artists/%s?page=%d'%(self.url,self.id,page)
         artworksInfo=readData(artistUrl)
@@ -170,7 +171,8 @@ class Artwork:
                     break
 
                 if rateHook:
-                    rateHook(saveFilePath,totalSize,readSize)
+                    percent=round((float(readSize)/totalSize)*100,2)
+                    rateHook(saveFilePath,percent)
 
             saveFile.close()
         
